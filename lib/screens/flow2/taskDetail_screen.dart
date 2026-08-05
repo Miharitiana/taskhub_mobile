@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'taskComment_screen.dart';
+import '../../services/task_service.dart';
 
 const _adaiOrange = Color(0xFFB5651D);
 const _adaiBrown = Color(0xFF3E2B1F);
@@ -21,9 +22,32 @@ class TaskDetailScreen extends StatefulWidget {
 
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
   bool _descriptionExpanded = true;
+  bool _isLoading = true;
 
-  // TODO: remplacer par les vraies données de la tâche (via constructeur/API)
-  final String _title = 'Intégration de l\'écran de connexion';
+  @override
+  void initState() {
+    super.initState();
+    _loadDetailsTasks();
+  }
+
+  Future<void> _loadDetailsTasks() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final taskService = TaskService();
+      final tasks = await taskService.getTaskById();   
+    }catch (e) {
+      // Gérer les erreurs ici, par exemple en affichant un message d'erreur
+      print('Erreur lors du chargement des tâches : $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+
+  final String _title = '${tasks.title}';
   final String _project = 'Mobile App';
   final String _sprint = 'Sprint 12';
   final String _deadline = '28/06/2026';
@@ -35,6 +59,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   final String _description =
       'Développer et intégrer l\'écran de connexion avec email/mot de passe et option biométrie. Respecter les maquettes Figma.';
 
+  }
+  // TODO: remplacer par les vraies données de la tâche (via constructeur/API)
+  
   final List<ChecklistItem> _checklist = [
     ChecklistItem(label: 'Créer la vue UI', done: true),
     ChecklistItem(label: 'Intégrer les champs email & mot de passe', done: true),

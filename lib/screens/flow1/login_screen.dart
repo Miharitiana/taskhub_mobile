@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
 import './loading_screen.dart';
+import '../../services/auth_service.dart';
+
+final authService = AuthService();
 
 const _adaiOrange = Color(0xFFB5651D);
 const _adaiBrown = Color(0xFF3E2B1F);
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
-
+ 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -17,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -25,14 +29,38 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() {
-    if (_formKey.currentState!.validate()) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => const LoadingScreen(),
-        ),
+  Future<void> _handleLogin() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    try {
+    final result =
+      await authService.login(
+        _emailController.text,
+        _passwordController.text,
       );
-    }
+    print(result.message);
+    print(result.user.name);
+    print(result.user.role);
+    print(result.token);
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => const LoadingScreen(),
+      ),
+    );
+    
+  } catch(e){
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+        backgroundColor: Colors.red,
+      ),
+    );
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
+  }
   }
 
   void _handleBiometricLogin() {
@@ -116,7 +144,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
                   const SizedBox(height: 18),
-
 
                 TextFormField(
                   controller: _passwordController,

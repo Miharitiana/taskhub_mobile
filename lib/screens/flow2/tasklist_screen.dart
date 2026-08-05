@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../models/task.dart' as api;
+import '../../services/task_service.dart';
 import 'taskDetail_screen.dart';
+
+
+final taskService = TaskService();
 
 const _adaiOrange = Color(0xFFB5651D);
 const _adaiBrown = Color(0xFF3E2B1F);
@@ -33,36 +38,75 @@ class TaskListScreen extends StatefulWidget {
 class _TaskListScreenState extends State<TaskListScreen> {
   TaskStatus? _selectedFilter; // null = "Toutes"
 
-  static const _tasks = [
-    Task(
-      title: 'Intégration de l\'écran de connexion',
-      project: 'Projet Mobile App',
-      deadline: '28/06/2026',
-      status: TaskStatus.aFaire,
-      avatarUrl: 'https://i.pravatar.cc/100?img=12',
-    ),
-    Task(
-      title: 'API gestion des utilisateurs',
-      project: 'Projet Backend',
-      deadline: '01/07/2026',
-      status: TaskStatus.enCours,
-      avatarUrl: 'https://i.pravatar.cc/100?img=32',
-    ),
-    Task(
-      title: 'Correction bug formulaire',
-      project: 'Projet Web Platform',
-      deadline: '25/06/2026',
-      status: TaskStatus.aTester,
-      avatarUrl: 'https://i.pravatar.cc/100?img=51',
-    ),
-    Task(
-      title: 'Design écran tableau de bord',
-      project: 'Projet Dashboard',
-      deadline: '20/06/2026',
-      status: TaskStatus.termine,
-      avatarUrl: 'https://i.pravatar.cc/100?img=45',
-    ),
-  ];
+  List<Task> _tasks = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTasks();
+  }
+
+  Future<void> _loadTasks() async {
+    
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final apiTasks= 
+        await taskService.getAllTasks();
+      final uiTasks = apiTasks.map(_mapApiTaskToUiTask).toList();
+
+      if (!mounted) return;
+      setState(() {
+        _tasks = uiTasks;
+        _isLoading = false;
+      });
+    }catch(e){
+      if (!mounted) return;
+       setState(() {
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _isLoading = false;
+      });
+    }
+  }
+
+  Task _mapApiTaskToUiTask(api.Task apiTask) {
+    return Task(
+      title: apiTask.title,
+      project: 'Projet #${apiTask.projectId}', // TODO: remplacer par le vrai nom du projet
+      deadline: apiTask.deadline != null
+          ? '${apiTask.deadline!.day.toString().padLeft(2, '0')}/'
+              '${apiTask.deadline!.month.toString().padLeft(2, '0')}/'
+              '${apiTask.deadline!.year}'
+          : 'Non définie',
+      status: _mapApiStatus(apiTask.status),
+      avatarUrl: 'https://i.pravatar.cc/100?u=${apiTask.assignedToId}', // TODO: remplacer par le vrai avatar utilisateur
+    );
+  }
+  
+  TaskStatus _mapApiStatus(String status) {
+    // TODO: ajuster ces valeurs selon les vraies valeurs renvoyées par ton backend
+    switch (status) {
+      case 'todo':
+      case 'a_faire':
+        return TaskStatus.aFaire;
+      case 'in_progress':
+      case 'en_cours':
+        return TaskStatus.enCours;
+      case 'to_test':
+      case 'a_tester':
+        return TaskStatus.aTester;
+      case 'done':
+      case 'termine':
+        return TaskStatus.termine;
+      default:
+        return TaskStatus.aFaire;
+    }
+  }
 
   List<Task> get _filteredTasks {
     if (_selectedFilter == null) return _tasks;
@@ -130,7 +174,30 @@ class _TaskListScreenState extends State<TaskListScreen> {
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: ListView.builder(
+          child: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: _loadTasks,
+                      child: const Text('Réessayer'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          :ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: _filteredTasks.length,
             itemBuilder: (context, index) {

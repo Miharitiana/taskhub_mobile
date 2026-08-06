@@ -13,6 +13,7 @@ const _adaiBrown = Color(0xFF3E2B1F);
 enum TaskStatus { aFaire, enCours, aTester, termine }
 
 class Task {
+  final int id;
   final String title;
   final String project;
   final String deadline;
@@ -20,6 +21,7 @@ class Task {
   final String avatarUrl;
 
   const Task({
+    required this.id,
     required this.title,
     required this.project,
     required this.deadline,
@@ -76,12 +78,13 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
   Task _mapApiTaskToUiTask(api.Task apiTask) {
     return Task(
+      id: apiTask.id,
       title: apiTask.title,
-      project: 'Projet #${apiTask.projectId}', // TODO: remplacer par le vrai nom du projet
+      project: apiTask.projectName ?? 'Projet #${apiTask.projectId}',
       deadline: apiTask.deadline != null
-          ? '${apiTask.deadline!.day.toString().padLeft(2, '0')}/'
-              '${apiTask.deadline!.month.toString().padLeft(2, '0')}/'
-              '${apiTask.deadline!.year}'
+          ? '${apiTask.deadline!.toLocal().day.toString().padLeft(2, '0')}/'
+              '${apiTask.deadline!.toLocal().month.toString().padLeft(2, '0')}/'
+              '${apiTask.deadline!.toLocal().year}'
           : 'Non définie',
       status: _mapApiStatus(apiTask.status),
       avatarUrl: 'https://i.pravatar.cc/100?u=${apiTask.assignedToId}', // TODO: remplacer par le vrai avatar utilisateur
@@ -272,7 +275,7 @@ class _TaskCard extends StatelessWidget {
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => const TaskDetailScreen(),
+            builder: (context) => TaskDetailScreen(taskId: task.id),
           ),
         );
       },

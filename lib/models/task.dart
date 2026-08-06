@@ -1,12 +1,16 @@
 class Task {
   final int id;
-  final int projectId;
+  final int? projectId;
   final int? sprintId;
-  final int assignedToId;
-  final int createdById;
+  final int? assignedToId;
+  final int? createdById;
+
+  final String? projectName;
+  final String? sprintName;
+  final String? assignedToName;
 
   final String title;
-  final String description;
+  final String? description;
 
   final String priority;
   final String status;
@@ -27,7 +31,7 @@ class Task {
 
   final DateTime? timeExceededNotifiedAt;
 
-  final DateTime createdAt;
+  final DateTime? createdAt;
 
   final DateTime updatedAt;
 
@@ -35,12 +39,15 @@ class Task {
 
   Task({
     required this.id,
-    required this.projectId,
+    this.projectId,
     this.sprintId,
-    required this.assignedToId,
-    required this.createdById,
+    this.assignedToId,
+    this.createdById,
+    this.projectName,
+    this.sprintName,
+    this.assignedToName,
     required this.title,
-    required this.description,
+    this.description,
     required this.priority,
     required this.status,
     this.deadline,
@@ -51,7 +58,7 @@ class Task {
     this.startedAt,
     this.estimatedHours,
     this.timeExceededNotifiedAt,
-    required this.createdAt,
+    this.createdAt,
     required this.updatedAt,
     this.deletedAt,
   });
@@ -59,10 +66,13 @@ class Task {
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(
       id: json['id'],
-      projectId: json['project_id'],
-      sprintId: json['sprint_id'],
-      assignedToId: json['assigned_to_id'],
-      createdById: json['created_by_id'],
+      projectId: json['project_id'] ?? json['project']?['id'],
+      sprintId: json['sprint_id'] ?? json['sprint']?['id'],
+      assignedToId: json['assigned_to_id'] ?? json['assigned_to']?['id'],
+      createdById: json['created_by_id'] ?? json['created_by']?['id'],
+      projectName: json['project']?['name'],
+      sprintName: json['sprint']?['name'],
+      assignedToName: json['assigned_to']?['name'],
       title: json['title'],
       description: json['description'],
       priority: json['priority'],
@@ -87,7 +97,9 @@ class Task {
       timeExceededNotifiedAt: json['time_exceeded_notified_at'] != null
           ? DateTime.parse(json['time_exceeded_notified_at'])
           : null,
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : null,
       updatedAt: DateTime.parse(json['updated_at']),
       deletedAt: json['deleted_at'] != null
           ? DateTime.parse(json['deleted_at'])

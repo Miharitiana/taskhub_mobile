@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'taskComment_screen.dart';
 import '../../services/task_service.dart';
+import '../../models/task.dart' as api;
 
 const _adaiOrange = Color(0xFFB5651D);
 const _adaiBrown = Color(0xFF3E2B1F);
@@ -14,7 +15,9 @@ class ChecklistItem {
 }
 
 class TaskDetailScreen extends StatefulWidget {
-  const TaskDetailScreen({super.key});
+  final int taskId;
+
+  const TaskDetailScreen({super.key, required this.taskId});
 
   @override
   State<TaskDetailScreen> createState() => _TaskDetailScreenState();
@@ -23,6 +26,10 @@ class TaskDetailScreen extends StatefulWidget {
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
   bool _descriptionExpanded = true;
   bool _isLoading = true;
+  String? _errorMessage;
+  api.Task? _task;
+
+  final taskService = TaskService();
 
   @override
   void initState() {
@@ -33,35 +40,25 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   Future<void> _loadDetailsTasks() async {
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      final taskService = TaskService();
-      final tasks = await taskService.getTaskById();   
-    }catch (e) {
-      // Gérer les erreurs ici, par exemple en affichant un message d'erreur
-      print('Erreur lors du chargement des tâches : $e');
-    } finally {
+      final task = await taskService.getTaskById(widget.taskId.toString());
+      if (!mounted) return;
       setState(() {
+        _task = task;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
         _isLoading = false;
       });
     }
-
-  final String _title = '${tasks.title}';
-  final String _project = 'Mobile App';
-  final String _sprint = 'Sprint 12';
-  final String _deadline = '28/06/2026';
-  final List<String> _assignedAvatars = [
-    'https://i.pravatar.cc/100?img=12',
-    'https://i.pravatar.cc/100?img=32',
-  ];
-  final int _extraAssignedCount = 1;
-  final String _description =
-      'Développer et intégrer l\'écran de connexion avec email/mot de passe et option biométrie. Respecter les maquettes Figma.';
-
   }
-  // TODO: remplacer par les vraies données de la tâche (via constructeur/API)
-  
+
   final List<ChecklistItem> _checklist = [
     ChecklistItem(label: 'Créer la vue UI', done: true),
     ChecklistItem(label: 'Intégrer les champs email & mot de passe', done: true),
@@ -90,6 +87,32 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 ],
               ),
             ),
+            if (_isLoading)
+              const Expanded(child: Center(child: CircularProgressIndicator()))
+            else if (_errorMessage != null)
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: _loadDetailsTasks,
+                          child: const Text('Réessayer'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            else
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -97,7 +120,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _title,
+                      _task!.title,
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
@@ -114,9 +137,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             color: const Color(0xFFE3F0FB),
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: const Text(
-                            'À faire',
-                            style: TextStyle(
+                          child: Text(
+                            _task!.status,
+                            style: const TextStyle(
                               color: Color(0xFF2E7CD6),
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -126,9 +149,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         const SizedBox(width: 10),
                         const Icon(Icons.flag, size: 15, color: Colors.red),
                         const SizedBox(width: 4),
-                        const Text(
-                          'Haute',
-                          style: TextStyle(
+                        Text(
+                          _task!.priority,
+                          style: const TextStyle(
                             color: Colors.red,
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -146,43 +169,29 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       ),
                       child: Column(
                         children: [
-                          _InfoRow(label: 'Projet', value: _project),
-                          Divider(height: 1, color: Colors.grey.shade100),
-                          _InfoRow(label: 'Sprint', value: _sprint),
-                          Divider(height: 1, color: Colors.grey.shade100),
-                          _InfoRow(label: 'Deadline', value: _deadline),
+                          _InfoRow(
+                            label: 'Projet',
+                            value: _task!.projectName ?? 'Projet #${_task!.projectId}',
+                          ),
                           Divider(height: 1, color: Colors.grey.shade100),
                           _InfoRow(
-                            label: 'Assignés',
-                            valueWidget: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                for (final url in _assignedAvatars)
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 4),
-                                    child: CircleAvatar(
-                                      radius: 12,
-                                      backgroundImage: NetworkImage(url),
-                                    ),
-                                  ),
-                                if (_extraAssignedCount > 0)
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 4),
-                                    child: CircleAvatar(
-                                      radius: 12,
-                                      backgroundColor: Colors.grey.shade200,
-                                      child: Text(
-                                        '+$_extraAssignedCount',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey.shade700,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
+                            label: 'Sprint',
+                            value: _task!.sprintName ??
+                                (_task!.sprintId != null ? 'Sprint #${_task!.sprintId}' : 'Aucun'),
+                          ),
+                          Divider(height: 1, color: Colors.grey.shade100),
+                          _InfoRow(
+                            label: 'Deadline',
+                            value: _task!.deadline != null
+                                ? '${_task!.deadline!.toLocal().day.toString().padLeft(2, '0')}/'
+                                    '${_task!.deadline!.toLocal().month.toString().padLeft(2, '0')}/'
+                                    '${_task!.deadline!.toLocal().year}'
+                                : 'Non définie',
+                          ),
+                          Divider(height: 1, color: Colors.grey.shade100),
+                          _InfoRow(
+                            label: 'Assigné à',
+                            value: _task!.assignedToName ?? 'Utilisateur #${_task!.assignedToId}',
                           ),
                         ],
                       ),
@@ -214,7 +223,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                     if (_descriptionExpanded) ...[
                       const SizedBox(height: 8),
                       Text(
-                        _description,
+                        _task!.description ?? 'Aucune description',
                         style: TextStyle(color: Colors.grey.shade700, fontSize: 14, height: 1.4),
                       ),
                     ],

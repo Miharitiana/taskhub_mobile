@@ -307,7 +307,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (context) => const TaskCommentScreen(),
+                      builder: (context) => TaskCommentScreen(taskId: widget.taskId),
                     ),
                   );
                 },

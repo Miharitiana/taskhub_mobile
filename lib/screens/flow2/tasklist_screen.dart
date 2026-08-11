@@ -4,7 +4,6 @@ import '../../models/task.dart' as api;
 import '../../services/task_service.dart';
 import 'taskDetail_screen.dart';
 
-
 final taskService = TaskService();
 
 const _adaiOrange = Color(0xFFB5651D);

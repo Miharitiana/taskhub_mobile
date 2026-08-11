@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'taskUploadImg_screen.dart';
+import '../../services/comment_service.dart';
+import '../../models/comment.dart' as api;
+
+final commentService = CommentService();
 
 const _adaiOrange = Color(0xFFB5651D);
-
 class Comment {
   final String author;
   final String avatarUrl;
@@ -23,44 +26,65 @@ class Comment {
 }
 
 class TaskCommentScreen extends StatefulWidget {
-  const TaskCommentScreen({super.key});
+  const TaskCommentScreen({super.key, required this.taskId});
+  final int taskId;
 
   @override
   State<TaskCommentScreen> createState() => _TaskCommentScreenState();
+
 }
 
 class _TaskCommentScreenState extends State<TaskCommentScreen> {
   final _commentController = TextEditingController();
+  List<Comment> _comments = [];
+  bool _isLoading = true;
+  String? _errorMessage;
 
-  final List<Comment> _comments = [
-    const Comment(
-      author: 'Mirindra R.',
-      avatarUrl: 'https://i.pravatar.cc/100?img=12',
-      timestamp: '25/06/2026 à 14:30',
-      message: 'J\'ai commencé l\'intégration de la vue UI. Tout avance comme prévu.',
-      imageUrl: 'https://i.pravatar.cc/400?img=60',
-      likeCount: 2,
-    ),
-    const Comment(
-      author: 'Aina R.',
-      avatarUrl: 'https://i.pravatar.cc/100?img=45',
-      timestamp: '25/06/2026 à 15:10',
-      message: 'Super ! N\'oublie pas le mode sombre.',
-      likeCount: 1,
-    ),
-    const Comment(
-      author: 'Tovo M.',
-      avatarUrl: 'https://i.pravatar.cc/100?img=51',
-      timestamp: '25/06/2026 à 15:45',
-      message: 'Je vais préparer les endpoints pour l\'authentification.',
-    ),
-    const Comment(
-      author: 'Mirindra R.',
-      avatarUrl: 'https://i.pravatar.cc/100?img=12',
-      timestamp: 'Aujourd\'hui à 09:21',
-      message: 'L\'intégration est presque terminée. Je fais les tests maintenant.',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadcomments();
+  }
+
+    Future<void> _loadcomments() async {
+    setState(() {
+      _isLoading = true;
+      // Correction : sans cette remise à zéro, un ancien message d'erreur
+      // restait affiché même après un rechargement réussi.
+      _errorMessage = null;
+    });
+
+    try {
+      final apiComments = await commentService.getComments(widget.taskId);
+      final uiComments = apiComments.map(_mapApiCommentToUiTask).toList();
+      if (!mounted) return;
+      setState(() {
+        _comments = uiComments;
+        _isLoading = false;
+      });
+    }catch(e){
+      if (!mounted) return;
+       setState(() {
+        _isLoading = false;
+        _errorMessage = 'Erreur lors du chargement des commentaires';
+      });
+    }
+  }
+
+  Comment _mapApiCommentToUiTask(api.Comment apiComments) {
+    return Comment(
+      author: apiComments.user?.name ?? 'Utilisateur inconnu',
+      avatarUrl: 'https://i.pravatar.cc/100?u=${apiComments.userId}',
+      timestamp: apiComments.createdAt != null
+          ? '${apiComments.createdAt!.toLocal().day.toString().padLeft(2, '0')}/'
+              '${apiComments.createdAt!.toLocal().month.toString().padLeft(2, '0')}/'
+              '${apiComments.createdAt!.toLocal().year}'
+          : 'Non définie',
+      message: apiComments.body ?? 'Aucune description disponible',
+      imageUrl: null,
+      likeCount: 0,
+    );
+  }
 
   @override
   void dispose() {
@@ -68,20 +92,37 @@ class _TaskCommentScreenState extends State<TaskCommentScreen> {
     super.dispose();
   }
 
-  void _sendComment() {
+  Future<void> _sendComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
-    setState(() {
-      _comments.add(
-        Comment(
-          author: 'Moi',
-          avatarUrl: 'https://i.pravatar.cc/100?img=8',
-          timestamp: 'À l\'instant',
-          message: text,
+
+    // Correction : ajout optimiste retiré du bloc principal. On ajoute le
+    // commentaire localement seulement APRÈS confirmation de l'API, pour ne
+    // jamais afficher un commentaire qui n'a pas réellement été envoyé.
+    try {
+      // Correction : "await" manquant — sans lui, le try/catch ne pouvait
+      // pas intercepter les erreurs réseau/serveur (401, 422, etc.), qui
+      // partaient dans un Future ignoré.
+      final apiComment = await commentService.commentAjout(widget.taskId, body: text);
+
+      if (!mounted) return;
+      setState(() {
+        _comments.add(_mapApiCommentToUiTask(apiComment));
+      });
+      // Correction : le champ est maintenant vidé en cas de SUCCÈS (avant,
+      // il n'était vidé qu'en cas d'échec, ce qui était inversé).
+      _commentController.clear();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
         ),
       );
-      _commentController.clear();
-    });
+      // Le texte est volontairement conservé dans le champ en cas d'échec,
+      // pour permettre à l'utilisateur de réessayer sans tout retaper.
+    }
   }
 
   @override
@@ -100,12 +141,37 @@ class _TaskCommentScreenState extends State<TaskCommentScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            // Correction : _errorMessage était rempli en cas d'échec mais
+            // jamais affiché — la liste restait juste vide silencieusement.
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _comments.length,
-                itemBuilder: (context, index) => _CommentBubble(comment: _comments[index]),
-              ),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _errorMessage != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _errorMessage!,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.grey.shade600),
+                                ),
+                                const SizedBox(height: 12),
+                                TextButton(
+                                  onPressed: _loadcomments,
+                                  child: const Text('Réessayer'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _comments.length,
+                          itemBuilder: (context, index) => _CommentBubble(comment: _comments[index]),
+                        ),
             ),
             _CommentInputBar(
               controller: _commentController,

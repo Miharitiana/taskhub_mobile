@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 const _adaiOrange = Color(0xFFB5651D);
 
@@ -10,40 +13,58 @@ class TaskUploadImgScreen extends StatefulWidget {
 }
 
 class _TaskUploadImgScreenState extends State<TaskUploadImgScreen> {
-  String? _previewUrl;
+  final _picker = ImagePicker();
+
+  Uint8List? _previewBytes;
   String? _fileName;
   String? _fileSize;
 
-  void _pickFromCamera() {
-    // TODO: brancher image_picker -> ImagePicker().pickImage(source: ImageSource.camera)
-    setState(() {
-      _previewUrl = 'https://i.pravatar.cc/600?img=68';
-      _fileName = 'capture_bug_login.png';
-      _fileSize = '1.2 MB';
-    });
-  }
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? file = await _picker.pickImage(source: source, imageQuality: 85);
+      if (file == null) return;
 
-  void _pickFromGallery() {
-    // TODO: brancher image_picker -> ImagePicker().pickImage(source: ImageSource.gallery)
-    setState(() {
-      _previewUrl = 'https://i.pravatar.cc/600?img=68';
-      _fileName = 'capture_bug_login.png';
-      _fileSize = '1.2 MB';
-    });
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _previewBytes = bytes;
+        _fileName = file.name;
+        _fileSize = '${(bytes.lengthInBytes / 1024).toStringAsFixed(0)} Ko';
+      });
+    } catch (e) {
+      // Cas typique sur Chrome desktop sans webcam : NotFoundError lors de
+      // pickImage(source: camera), ou permission refusée par le navigateur.
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            source == ImageSource.camera
+                ? 'Caméra indisponible ou accès refusé.'
+                : 'Impossible de sélectionner une image.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _removeSelection() {
     setState(() {
-      _previewUrl = null;
+      _previewBytes = null;
       _fileName = null;
       _fileSize = null;
     });
   }
 
   void _sendPhoto() {
-    if (_previewUrl == null) return;
-    // TODO: envoyer le fichier au backend
-    Navigator.of(context).maybePop();
+    if (_previewBytes == null) return;
+    // On ne parle pas au backend ici : on renvoie juste l'image choisie à
+    // l'écran appelant (TaskCommentScreen), qui connaît le taskId et
+    // déclenche l'appel API via CommentService.
+    Navigator.of(context).pop({
+      'bytes': _previewBytes!,
+      'fileName': _fileName ?? 'comment_image.jpg',
+    });
   }
 
   @override
@@ -79,13 +100,13 @@ class _TaskUploadImgScreenState extends State<TaskUploadImgScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 8),
-                    if (_previewUrl != null)
+                    if (_previewBytes != null)
                       Stack(
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(16),
-                            child: Image.network(
-                              _previewUrl!,
+                            child: Image.memory(
+                              _previewBytes!,
                               height: 200,
                               width: double.infinity,
                               fit: BoxFit.cover,
@@ -118,7 +139,7 @@ class _TaskUploadImgScreenState extends State<TaskUploadImgScreen> {
                           child: _PickOptionCard(
                             icon: Icons.camera_alt_outlined,
                             label: 'Appareil photo',
-                            onTap: _pickFromCamera,
+                            onTap: () => _pickImage(ImageSource.camera),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -126,7 +147,7 @@ class _TaskUploadImgScreenState extends State<TaskUploadImgScreen> {
                           child: _PickOptionCard(
                             icon: Icons.image_outlined,
                             label: 'Galerie',
-                            onTap: _pickFromGallery,
+                            onTap: () => _pickImage(ImageSource.gallery),
                           ),
                         ),
                       ],
@@ -179,7 +200,7 @@ class _TaskUploadImgScreenState extends State<TaskUploadImgScreen> {
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: _previewUrl != null ? _sendPhoto : null,
+                  onPressed: _previewBytes != null ? _sendPhoto : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _adaiOrange,
                     disabledBackgroundColor: Colors.grey.shade300,

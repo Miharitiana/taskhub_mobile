@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 
 import 'taskUploadImg_screen.dart';
 import '../../services/comment_service.dart';
@@ -81,7 +82,7 @@ class _TaskCommentScreenState extends State<TaskCommentScreen> {
               '${apiComments.createdAt!.toLocal().year}'
           : 'Non définie',
       message: apiComments.body ?? 'Aucune description disponible',
-      imageUrl: null,
+      imageUrl: apiComments.imageUrl,
       likeCount: 0,
     );
   }
@@ -124,6 +125,29 @@ class _TaskCommentScreenState extends State<TaskCommentScreen> {
       // pour permettre à l'utilisateur de réessayer sans tout retaper.
     }
   }
+
+  Future<void> _sendImageComment(Uint8List bytes, String fileName) async {
+    try {
+      final apiComment = await commentService.commentAjout(
+        widget.taskId,
+        imageBytes: bytes,
+        imageFileName: fileName,
+      );
+      if (!mounted) return;
+      setState(() {
+        _comments.add(_mapApiCommentToUiTask(apiComment));
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -176,7 +200,9 @@ class _TaskCommentScreenState extends State<TaskCommentScreen> {
             _CommentInputBar(
               controller: _commentController,
               onSend: _sendComment,
+              onImageSelected: _sendImageComment,
             ),
+
           ],
         ),
       ),
@@ -271,8 +297,13 @@ class _CommentBubble extends StatelessWidget {
 class _CommentInputBar extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
+  final Future<void> Function(Uint8List bytes, String fileName) onImageSelected;
 
-  const _CommentInputBar({required this.controller, required this.onSend});
+  const _CommentInputBar({
+    required this.controller,
+    required this.onSend,
+    required this.onImageSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -300,12 +331,18 @@ class _CommentInputBar extends StatelessWidget {
                     ),
                   ),
                   GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
+                    onTap: () async {
+                      final result = await Navigator.of(context).push<Map<String, dynamic>>(
                         MaterialPageRoute(
                           builder: (context) => const TaskUploadImgScreen(),
                         ),
                       );
+                      if (result != null) {
+                        await onImageSelected(
+                          result['bytes'] as Uint8List,
+                          result['fileName'] as String,
+                        );
+                      }
                     },
                     child: Icon(Icons.attach_file, color: Colors.grey.shade500, size: 20),
                   ),

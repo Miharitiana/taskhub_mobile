@@ -27,12 +27,14 @@ class ChatMessage {
 }
 
 class ConversationScreen extends StatefulWidget {
+  final int? conversationId;
   final String projectName;
   final int onlineMembersCount;
   final List<String> memberAvatarUrls;
 
   const ConversationScreen({
     super.key,
+    this.conversationId,
     this.projectName = 'Mobile App',
     this.onlineMembersCount = 8,
     this.memberAvatarUrls = const [

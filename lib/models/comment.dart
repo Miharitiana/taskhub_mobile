@@ -4,7 +4,7 @@ class Comment {
   final int id;
   final int taskId;
   final int userId;
-  final String body;
+  final String? body;
   final String? imageUrl;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -17,7 +17,7 @@ class Comment {
     required this.id,
     required this.taskId,
     required this.userId,
-    required this.body,
+    this.body,
     this.imageUrl,
     required this.createdAt,
     required this.updatedAt,

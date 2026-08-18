@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:typed_data';
 
 import 'taskUploadImg_screen.dart';
+import 'imageViewer_screen.dart';
 import '../../services/comment_service.dart';
 import '../../models/comment.dart' as api;
 
@@ -126,10 +127,11 @@ class _TaskCommentScreenState extends State<TaskCommentScreen> {
     }
   }
 
-  Future<void> _sendImageComment(Uint8List bytes, String fileName) async {
+  Future<void> _sendImageComment(Uint8List bytes, String fileName, String? description) async {
     try {
       final apiComment = await commentService.commentAjout(
         widget.taskId,
+        body: description,
         imageBytes: bytes,
         imageFileName: fileName,
       );
@@ -224,7 +226,12 @@ class _CommentBubble extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 18,
+            backgroundColor: const Color(0xFFF5F5F5),
             backgroundImage: NetworkImage(comment.avatarUrl),
+            // Correction : évite l'exception plein écran (ImageCodecException /
+            // ProgressEvent) quand l'avatar externe (pravatar.cc) est
+            // injoignable — on garde juste le fond gris par défaut.
+            onBackgroundImageError: (exception, stackTrace) {},
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -261,13 +268,33 @@ class _CommentBubble extends StatelessWidget {
                   ),
                   if (comment.imageUrl != null) ...[
                     const SizedBox(height: 10),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.network(
-                        comment.imageUrl!,
-                        height: 130,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            fullscreenDialog: true,
+                            builder: (context) => ImageViewerScreen(imageUrl: comment.imageUrl!),
+                          ),
+                        );
+                      },
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          comment.imageUrl!,
+                          height: 130,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          // Correction : remplace l'exception plein écran par un
+                          // placeholder quand l'image (URL cassée, serveur
+                          // injoignable) ne peut pas être chargée.
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            height: 130,
+                            width: double.infinity,
+                            color: Colors.grey.shade200,
+                            alignment: Alignment.center,
+                            child: Icon(Icons.broken_image_outlined, color: Colors.grey.shade400),
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -297,7 +324,7 @@ class _CommentBubble extends StatelessWidget {
 class _CommentInputBar extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
-  final Future<void> Function(Uint8List bytes, String fileName) onImageSelected;
+  final Future<void> Function(Uint8List bytes, String fileName, String? description) onImageSelected;
 
   const _CommentInputBar({
     required this.controller,
@@ -341,6 +368,7 @@ class _CommentInputBar extends StatelessWidget {
                         await onImageSelected(
                           result['bytes'] as Uint8List,
                           result['fileName'] as String,
+                          result['description'] as String?,
                         );
                       }
                     },

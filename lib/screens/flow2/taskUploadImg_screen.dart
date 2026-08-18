@@ -14,10 +14,17 @@ class TaskUploadImgScreen extends StatefulWidget {
 
 class _TaskUploadImgScreenState extends State<TaskUploadImgScreen> {
   final _picker = ImagePicker();
+  final _descriptionController = TextEditingController();
 
   Uint8List? _previewBytes;
   String? _fileName;
   String? _fileSize;
+
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickImage(ImageSource source) async {
     try {
@@ -58,12 +65,14 @@ class _TaskUploadImgScreenState extends State<TaskUploadImgScreen> {
 
   void _sendPhoto() {
     if (_previewBytes == null) return;
-    // On ne parle pas au backend ici : on renvoie juste l'image choisie à
-    // l'écran appelant (TaskCommentScreen), qui connaît le taskId et
-    // déclenche l'appel API via CommentService.
+    // On ne parle pas au backend ici : on renvoie juste l'image (et la
+    // description optionnelle) à l'écran appelant (TaskCommentScreen), qui
+    // connaît le taskId et déclenche l'appel API via CommentService.
+    final description = _descriptionController.text.trim();
     Navigator.of(context).pop({
       'bytes': _previewBytes!,
       'fileName': _fileName ?? 'comment_image.jpg',
+      'description': description.isEmpty ? null : description,
     });
   }
 
@@ -187,6 +196,21 @@ class _TaskUploadImgScreenState extends State<TaskUploadImgScreen> {
                               child: Icon(Icons.close, size: 18, color: Colors.grey.shade600),
                             ),
                           ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _descriptionController,
+                        maxLines: 3,
+                        decoration: InputDecoration(
+                          hintText: 'Ajouter une description (facultatif)...',
+                          filled: true,
+                          fillColor: const Color(0xFFF5F5F5),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.all(14),
                         ),
                       ),
                     ],

@@ -1,11 +1,25 @@
 import 'package:flutter/material.dart';
 
 import 'conversation_screen.dart';
+import '../../services/chat_service.dart';
+import '../../models/conversation.dart' as api;
+
+final chatService = ChatService();
 
 const _adaiOrange = Color(0xFFB5651D);
 
+// Palette utilisée pour donner une icône/couleur déterministe à chaque
+// conversation, faute d'un tel champ renvoyé par l'API.
+const _iconPalette = [
+  (Icons.phone_iphone, Color(0xFF3A9B54)),
+  (Icons.terminal, Color(0xFF8B5CF6)),
+  (Icons.dashboard_outlined, Color(0xFFE0A527)),
+  (Icons.bug_report_outlined, Color(0xFF2E7CD6)),
+  (Icons.campaign_outlined, Color(0xFFE0709B)),
+];
+
 class ConversationPreview {
-  final String id;
+  final int id;
   final String projectName;
   final IconData icon;
   final Color iconBg;
@@ -28,8 +42,6 @@ class ConversationPreview {
   });
 }
 
-
-
 class ConversationListScreen extends StatefulWidget {
   const ConversationListScreen({super.key});
 
@@ -38,66 +50,75 @@ class ConversationListScreen extends StatefulWidget {
 }
 
 class _ConversationListScreenState extends State<ConversationListScreen> {
-  final List<ConversationPreview> _conversations = const [
-    ConversationPreview(
-      id: '1',
-      projectName: 'Mobile App',
-      icon: Icons.phone_iphone,
-      iconBg: Color(0xFF3A9B54),
+  List<ConversationPreview> _conversations = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConversations();
+  }
+
+  Future<void> _loadConversations() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final apiConversations = await chatService.getConversations();
+      final previews = apiConversations.map(_mapApiConversationToPreview).toList();
+      if (!mounted) return;
+      setState(() {
+        _conversations = previews;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Erreur lors du chargement des conversations';
+      });
+    }
+  }
+
+  ConversationPreview _mapApiConversationToPreview(api.Conversation conversation) {
+    final palette = _iconPalette[conversation.id % _iconPalette.length];
+    final lastMessage = conversation.lastMessage;
+
+    return ConversationPreview(
+      id: conversation.id,
+      projectName: conversation.project?.name ?? conversation.name ?? 'Conversation',
+      icon: palette.$1,
+      iconBg: palette.$2,
       iconColor: Colors.white,
-      lastSender: 'Mirindra R.',
-      lastMessage: 'J\'ai mis à jour l\'écran de connexion, à tester s\'il vous plaît.',
-      time: '10:32',
-      unreadCount: 3,
-    ),
-    
-    ConversationPreview(
-      id: '2',
-      projectName: 'Backend API',
-      icon: Icons.terminal,
-      iconBg: Color(0xFF8B5CF6),
-      iconColor: Colors.white,
-      lastSender: 'Tovo M.',
-      lastMessage: 'L\'endpoint d\'authentification est prêt pour les tests.',
-      time: '09:15',
-      unreadCount: 2,
-    ),
-    ConversationPreview(
-      id: '3',
-      projectName: 'Dashboard',
-      icon: Icons.dashboard_outlined,
-      iconBg: Color(0xFFE0A527),
-      iconColor: Colors.white,
-      lastSender: 'Aina R.',
-      lastMessage: 'Le design du tableau de bord est validé.',
-      time: 'Hier',
-      unreadCount: 1,
-    ),
-    ConversationPreview(
-      id: '4',
-      projectName: 'Bugs & Support',
-      icon: Icons.bug_report_outlined,
-      iconBg: Color(0xFF2E7CD6),
-      iconColor: Colors.white,
-      lastSender: 'Rakoto N.',
-      lastMessage: 'Bug #125 corrigé dans la dernière version.',
-      time: 'Hier',
-    ),
-    ConversationPreview(
-      id: '5',
-      projectName: 'Marketing Site',
-      icon: Icons.campaign_outlined,
-      iconBg: Color(0xFFE0709B),
-      iconColor: Colors.white,
-      lastSender: 'Rija S.',
-      lastMessage: 'Le contenu de la page d\'accueil est en ligne.',
-      time: '26/06',
-    ),
-  ];
+      lastSender: lastMessage?.user?.name ?? '',
+      lastMessage: lastMessage?.body ??
+          (lastMessage?.fileUrl != null ? '📷 Photo' : 'Aucun message pour l\'instant'),
+      time: _formatRelativeTime(conversation.lastMessageAt),
+      unreadCount: conversation.unreadCount,
+    );
+  }
+
+  String _formatRelativeTime(DateTime? dateTime) {
+    if (dateTime == null) return '';
+    final local = dateTime.toLocal();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final date = DateTime(local.year, local.month, local.day);
+
+    if (date == today) {
+      return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    }
+    if (date == today.subtract(const Duration(days: 1))) {
+      return 'Hier';
+    }
+    return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
-    
     return Material(
       color: Colors.white,
       child: Column(
@@ -134,14 +155,44 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
             ),
           ),
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _conversations.length,
-              separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
-              itemBuilder: (context, index) {
-                return _ConversationTile(conversation: _conversations[index]);
-              },
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _errorMessage != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey.shade600),
+                              ),
+                              const SizedBox(height: 12),
+                              TextButton(
+                                onPressed: _loadConversations,
+                                child: const Text('Réessayer'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : _conversations.isEmpty
+                        ? Center(
+                            child: Text(
+                              'Aucune conversation pour l\'instant',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: _conversations.length,
+                            separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
+                            itemBuilder: (context, index) {
+                              return _ConversationTile(conversation: _conversations[index]);
+                            },
+                          ),
           ),
         ],
       ),
@@ -160,7 +211,10 @@ class _ConversationTile extends StatelessWidget {
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => ConversationScreen(projectName: conversation.projectName),
+            builder: (context) => ConversationScreen(
+              conversationId: conversation.id,
+              projectName: conversation.projectName,
+            ),
           ),
         );
       },
@@ -193,7 +247,9 @@ class _ConversationTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${conversation.lastSender}: ${conversation.lastMessage}',
+                    conversation.lastSender.isEmpty
+                        ? conversation.lastMessage
+                        : '${conversation.lastSender}: ${conversation.lastMessage}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.3),

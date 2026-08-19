@@ -1,22 +1,5 @@
 import 'comment_user.dart';
 
-class ConversationProject {
-  final int id;
-  final String name;
-
-  ConversationProject({
-    required this.id,
-    required this.name,
-  });
-
-  factory ConversationProject.fromJson(Map<String, dynamic> json) {
-    return ConversationProject(
-      id: json['id'],
-      name: json['name'],
-    );
-  }
-}
-
 class LastMessage {
   final int id;
   final String? body;
@@ -46,33 +29,50 @@ class LastMessage {
   }
 }
 
+class ConversationMember {
+  final int id;
+  final String name;
+  final String? role;
+
+  ConversationMember({
+    required this.id,
+    required this.name,
+    this.role,
+  });
+
+  factory ConversationMember.fromJson(Map<String, dynamic> json) {
+    return ConversationMember(
+      id: json['id'],
+      name: json['name'],
+      role: json['role'],
+    );
+  }
+}
+
 class Conversation {
   final int id;
-  final String type;
+  final bool isGroup;
   final String? name;
-  final ConversationProject? project;
   final LastMessage? lastMessage;
   final int unreadCount;
   final DateTime? lastMessageAt;
+  final List<ConversationMember> members;
 
   Conversation({
     required this.id,
-    required this.type,
+    required this.isGroup,
     this.name,
-    this.project,
     this.lastMessage,
     required this.unreadCount,
     this.lastMessageAt,
+    this.members = const [],
   });
 
   factory Conversation.fromJson(Map<String, dynamic> json) {
     return Conversation(
       id: json['id'],
-      type: json['type'],
+      isGroup: json['is_group'] ?? false,
       name: json['name'],
-      project: json['project'] != null
-          ? ConversationProject.fromJson(json['project'])
-          : null,
       lastMessage: json['last_message'] != null
           ? LastMessage.fromJson(json['last_message'])
           : null,
@@ -80,6 +80,13 @@ class Conversation {
       lastMessageAt: json['last_message_at'] != null
           ? DateTime.parse(json['last_message_at'])
           : null,
+      // Présent sur getConversation/createDirect/createGroup, absent de
+      // getConversations (liste) — d'où la valeur par défaut [].
+      members: json['members'] != null
+          ? (json['members'] as List)
+              .map((e) => ConversationMember.fromJson(e))
+              .toList()
+          : const [],
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'conversation_screen.dart';
+import 'createConversation_screen.dart';
 import '../../services/chat_service.dart';
 import '../../models/conversation.dart' as api;
 
@@ -89,7 +90,7 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
 
     return ConversationPreview(
       id: conversation.id,
-      projectName: conversation.project?.name ?? conversation.name ?? 'Conversation',
+      projectName: conversation.name ?? (conversation.isGroup ? 'Groupe' : 'Conversation'),
       icon: palette.$1,
       iconBg: palette.$2,
       iconColor: Colors.white,
@@ -137,12 +138,31 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
                     color: Colors.black,
                   ),
                 ),
-                const CircleAvatar(
-                  radius: 20,
-                  backgroundImage: NetworkImage(
-                    'https://dashboard-wally-process-interne.adaiexpertise.fr/logo_sans_fond.png',
-                  ),
-                  backgroundColor: Colors.transparent,
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.add_circle, color: _adaiOrange, size: 28),
+                      tooltip: 'Nouvelle conversation',
+                      onPressed: () async {
+                        final created = await Navigator.of(context).push<bool>(
+                          MaterialPageRoute(
+                            builder: (context) => const CreateConversationScreen(),
+                          ),
+                        );
+                        if (created == true) {
+                          _loadConversations();
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    const CircleAvatar(
+                      radius: 20,
+                      backgroundImage: NetworkImage(
+                        'https://dashboard-wally-process-interne.adaiexpertise.fr/logo_sans_fond.png',
+                      ),
+                      backgroundColor: Colors.transparent,
+                    ),
+                  ],
                 ),
               ],
             ),

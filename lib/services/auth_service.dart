@@ -31,12 +31,17 @@ class AuthService {
       final json = jsonDecode(response.body);
       final loginResponse =
           LoginResponse.fromJson(json);
-      // sauvegarde token
+      // sauvegarde token + id utilisateur (nécessaire pour distinguer "mes
+      // messages" des messages des autres dans le chat)
       final prefs =
           await SharedPreferences.getInstance();
       await prefs.setString(
           "token",
           loginResponse.token
+      );
+      await prefs.setInt(
+          "user_id",
+          loginResponse.user.id
       );
       return loginResponse;
     }else{

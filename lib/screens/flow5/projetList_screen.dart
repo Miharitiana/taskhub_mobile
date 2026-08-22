@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../flow4/notificationListe_screen.dart';
 import 'projetDetail_screen.dart';
+import '../../services/notification_service.dart';
+
+final _notificationService = NotificationService();
 
 const _adaiOrange = Color(0xFFB5651D);
 
@@ -33,7 +36,23 @@ class ProjetListScreen extends StatefulWidget {
 }
 
 class _ProjetListScreenState extends State<ProjetListScreen> {
-  int _unreadNotifications = 3;
+  int _unreadNotifications = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUnreadNotifications();
+  }
+
+  Future<void> _loadUnreadNotifications() async {
+    try {
+      final count = await _notificationService.getUnreadCount();
+      if (!mounted) return;
+      setState(() => _unreadNotifications = count);
+    } catch (_) {
+      // Erreur silencieuse : le badge reste juste absent, pas bloquant.
+    }
+  }
 
   // TODO: remplacer par les vraies données (API projets)
   final int _totalProjects = 12;
@@ -109,13 +128,15 @@ class _ProjetListScreenState extends State<ProjetListScreen> {
     ),
   ];
 
-  void _openNotifications() {
-    setState(() => _unreadNotifications = 0);
-    Navigator.of(context).push(
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => const NotificationListeScreen(),
       ),
     );
+    // Recharge au retour : l'utilisateur a pu marquer des notifications
+    // comme lues (une par une ou "Tout marqué comme lu") pendant l'écran.
+    _loadUnreadNotifications();
   }
 
   @override

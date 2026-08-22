@@ -1,35 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../flow2/taskDetail_screen.dart';
+import '../../models/app_notification.dart';
+import '../../services/notification_service.dart';
+
+final _notificationService = NotificationService();
+
 const _adaiOrange = Color(0xFFB5651D);
 
-enum NotificationFilter { toutes, nonLues, mentions }
-
-enum NotificationType {
-  nouvelleTache,
-  depassementTemps,
-  tacheATester,
-  nouveauCommentaire,
-  miseAJour,
-  echeanceProche,
-}
-
-class AppNotification {
-  final String id;
-  final NotificationType type;
-  final String title;
-  final String description;
-  final String time;
-  bool isRead;
-
-  AppNotification({
-    required this.id,
-    required this.type,
-    required this.title,
-    required this.description,
-    required this.time,
-    this.isRead = false,
-  });
-}
+enum NotificationFilter { toutes, nonLues }
 
 class NotificationListeScreen extends StatefulWidget {
   const NotificationListeScreen({super.key});
@@ -41,77 +20,98 @@ class NotificationListeScreen extends StatefulWidget {
 class _NotificationListeScreenState extends State<NotificationListeScreen> {
   NotificationFilter _filter = NotificationFilter.toutes;
 
-  final List<AppNotification> _notifications = [
-    AppNotification(
-      id: '1',
-      type: NotificationType.nouvelleTache,
-      title: 'Nouvelle tâche assignée',
-      description: 'Tovo M. vous a assigné la tâche "Intégration de l\'écran de connexion".',
-      time: '2 min',
-    ),
-    AppNotification(
-      id: '2',
-      type: NotificationType.depassementTemps,
-      title: 'Dépassement de temps',
-      description: 'La tâche "Design écran tableau de bord" dépasse le temps estimé.',
-      time: '25 min',
-    ),
-    AppNotification(
-      id: '3',
-      type: NotificationType.tacheATester,
-      title: 'Tâche à tester',
-      description: 'La tâche "API gestion des utilisateurs" est prête pour les tests.',
-      time: '1 h',
-    ),
-    AppNotification(
-      id: '4',
-      type: NotificationType.nouveauCommentaire,
-      title: 'Nouveau commentaire',
-      description: 'Aina R. a commenté la tâche "Intégration de la vue UI".',
-      time: '2 h',
-    ),
-    AppNotification(
-      id: '5',
-      type: NotificationType.miseAJour,
-      title: 'Mise à jour de tâche',
-      description: 'Rakoto N. a mis à jour le statut de la tâche "Correction bug formulaire".',
-      time: '3 h',
-    ),
-    AppNotification(
-      id: '6',
-      type: NotificationType.echeanceProche,
-      title: 'Échéance proche',
-      description: 'La tâche "Tests unitaires" arrive à échéance demain.',
-      time: '5 h',
-    ),
-  ];
+  List<AppNotification> _notifications = [];
+  bool _isLoading = true;
+  String? _errorMessage;
 
-  List<AppNotification> get _filteredNotifications {
-    switch (_filter) {
-      case NotificationFilter.toutes:
-        return _notifications;
-      case NotificationFilter.nonLues:
-        return _notifications.where((n) => !n.isRead).toList();
-      case NotificationFilter.mentions:
-        return _notifications
-            .where((n) => n.type == NotificationType.nouveauCommentaire)
-            .toList();
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
+
+  Future<void> _loadNotifications() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final notifications = await _notificationService.getNotifications(
+        unreadOnly: _filter == NotificationFilter.nonLues,
+      );
+      if (!mounted) return;
+      setState(() {
+        _notifications = notifications;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Erreur lors du chargement des notifications';
+      });
     }
   }
 
-  void _markAsRead(String id) {
-    setState(() {
-      final notif = _notifications.firstWhere((n) => n.id == id);
-      notif.isRead = true;
-    });
+  void _onFilterChanged(NotificationFilter filter) {
+    setState(() => _filter = filter);
+    _loadNotifications();
   }
 
-  void _markAllAsRead() {
+  Future<void> _markAsRead(AppNotification notification) async {
+    if (notification.isRead) return;
+    // Optimiste : on met à jour tout de suite, on annule si l'appel échoue.
+    setState(() => notification.readAt = DateTime.now());
+    try {
+      await _notificationService.markAsRead(notification.id);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => notification.readAt = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _onNotificationTap(AppNotification notification) {
+    // Marquage lu sans attendre : ne doit pas retarder la navigation.
+    _markAsRead(notification);
+    if (notification.taskId != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => TaskDetailScreen(taskId: notification.taskId!),
+        ),
+      );
+    }
+  }
+
+  Future<void> _markAllAsRead() async {
+    final previousState = _notifications.map((n) => n.readAt).toList();
     setState(() {
       for (final n in _notifications) {
-        n.isRead = true;
+        n.readAt ??= DateTime.now();
       }
     });
+    try {
+      await _notificationService.markAllAsRead();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        for (var i = 0; i < _notifications.length; i++) {
+          _notifications[i].readAt = previousState[i];
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -161,34 +161,59 @@ class _NotificationListeScreenState extends State<NotificationListeScreen> {
                 _FilterChip(
                   label: 'Toutes',
                   selected: _filter == NotificationFilter.toutes,
-                  onTap: () => setState(() => _filter = NotificationFilter.toutes),
+                  onTap: () => _onFilterChanged(NotificationFilter.toutes),
                 ),
                 _FilterChip(
                   label: 'Non lues',
                   selected: _filter == NotificationFilter.nonLues,
-                  onTap: () => setState(() => _filter = NotificationFilter.nonLues),
-                ),
-                _FilterChip(
-                  label: 'Mentions',
-                  selected: _filter == NotificationFilter.mentions,
-                  onTap: () => setState(() => _filter = NotificationFilter.mentions),
+                  onTap: () => _onFilterChanged(NotificationFilter.nonLues),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 8),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _filteredNotifications.length,
-              itemBuilder: (context, index) {
-                final notif = _filteredNotifications[index];
-                return _NotificationTile(
-                  notification: notif,
-                  onMarkRead: () => _markAsRead(notif.id),
-                );
-              },
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _errorMessage != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey.shade600),
+                              ),
+                              const SizedBox(height: 12),
+                              TextButton(
+                                onPressed: _loadNotifications,
+                                child: const Text('Réessayer'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : _notifications.isEmpty
+                        ? Center(
+                            child: Text(
+                              'Aucune notification',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: _notifications.length,
+                            itemBuilder: (context, index) {
+                              final notif = _notifications[index];
+                              return _NotificationTile(
+                                notification: notif,
+                                onMarkRead: () => _onNotificationTap(notif),
+                              );
+                            },
+                          ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -245,6 +270,40 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
+({IconData icon, Color bg, Color fg}) _iconStyleForType(String? type) {
+  switch (type) {
+    case 'task':
+      return (icon: Icons.assignment_outlined, bg: const Color(0xFFE3F0FB), fg: const Color(0xFF2E7CD6));
+    case 'deadline':
+      return (icon: Icons.flag_outlined, bg: const Color(0xFFFCE4E4), fg: const Color(0xFFE05B33));
+    case 'task_validation':
+      return (icon: Icons.verified_outlined, bg: const Color(0xFFF1E7FB), fg: const Color(0xFF8B5CF6));
+    case 'budget_request':
+      return (icon: Icons.payments_outlined, bg: const Color(0xFFE5F5E9), fg: const Color(0xFF3A9B54));
+    case 'calendar_event':
+      return (icon: Icons.event_outlined, bg: const Color(0xFFE3F0FB), fg: const Color(0xFF2E7CD6));
+    case 'project':
+      return (icon: Icons.folder_outlined, bg: const Color(0xFFFDF0DE), fg: _adaiOrange);
+    case 'sprint':
+      return (icon: Icons.timeline_outlined, bg: const Color(0xFFFDF0DE), fg: _adaiOrange);
+    case 'time_tracking':
+      return (icon: Icons.access_time, bg: const Color(0xFFE5F5E9), fg: const Color(0xFF3A9B54));
+    default:
+      return (icon: Icons.notifications_outlined, bg: Colors.grey.shade200, fg: Colors.grey.shade600);
+  }
+}
+
+String _formatRelativeTime(DateTime dateTime) {
+  final diff = DateTime.now().difference(dateTime.toLocal());
+  if (diff.inMinutes < 1) return 'à l\'instant';
+  if (diff.inMinutes < 60) return '${diff.inMinutes} min';
+  if (diff.inHours < 24) return '${diff.inHours} h';
+  if (diff.inDays == 1) return 'Hier';
+  if (diff.inDays < 7) return '${diff.inDays} j';
+  final local = dateTime.toLocal();
+  return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}';
+}
+
 class _NotificationTile extends StatelessWidget {
   final AppNotification notification;
   final VoidCallback onMarkRead;
@@ -254,75 +313,58 @@ class _NotificationTile extends StatelessWidget {
     required this.onMarkRead,
   });
 
-  ({IconData icon, Color bg, Color fg}) get _iconStyle {
-    switch (notification.type) {
-      case NotificationType.nouvelleTache:
-        return (icon: Icons.assignment_outlined, bg: const Color(0xFFE3F0FB), fg: const Color(0xFF2E7CD6));
-      case NotificationType.depassementTemps:
-        return (icon: Icons.access_time, bg: const Color(0xFFFDF0DE), fg: _adaiOrange);
-      case NotificationType.tacheATester:
-        return (icon: Icons.check_circle_outline, bg: const Color(0xFFE5F5E9), fg: const Color(0xFF3A9B54));
-      case NotificationType.nouveauCommentaire:
-        return (icon: Icons.chat_bubble_outline, bg: const Color(0xFFF1E7FB), fg: const Color(0xFF8B5CF6));
-      case NotificationType.miseAJour:
-        return (icon: Icons.info_outline, bg: const Color(0xFFE3F0FB), fg: const Color(0xFF2E7CD6));
-      case NotificationType.echeanceProche:
-        return (icon: Icons.flag_outlined, bg: const Color(0xFFFCE4E4), fg: const Color(0xFFE05B33));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final style = _iconStyle;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: style.bg,
-              shape: BoxShape.circle,
+    final style = _iconStyleForType(notification.type);
+    return GestureDetector(
+      onTap: onMarkRead,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: style.bg,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(style.icon, color: style.fg, size: 20),
             ),
-            child: Icon(style.icon, color: style.fg, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    notification.title ?? 'Notification',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    notification.message ?? '',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.3),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  notification.title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black,
-                  ),
+                  _formatRelativeTime(notification.createdAt),
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  notification.description,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.3),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                notification.time,
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-              ),
-              if (!notification.isRead) ...[
-                const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: onMarkRead,
-                  child: Container(
+                if (!notification.isRead) ...[
+                  const SizedBox(height: 8),
+                  Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade200,
@@ -352,11 +394,11 @@ class _NotificationTile extends StatelessWidget {
                       ],
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

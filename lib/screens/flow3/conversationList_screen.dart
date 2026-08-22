@@ -95,8 +95,11 @@ class _ConversationListScreenState extends State<ConversationListScreen> {
       iconBg: palette.$2,
       iconColor: Colors.white,
       lastSender: lastMessage?.user?.name ?? '',
+      // '📎 Fichier' générique : la liste des conversations ne reçoit pas le
+      // mime_type du dernier message, impossible de savoir ici s'il s'agit
+      // d'une image ou d'un autre type de pièce jointe (pdf, doc, ...).
       lastMessage: lastMessage?.body ??
-          (lastMessage?.fileUrl != null ? '📷 Photo' : 'Aucun message pour l\'instant'),
+          (lastMessage?.fileUrl != null ? '📎 Fichier' : 'Aucun message pour l\'instant'),
       time: _formatRelativeTime(conversation.lastMessageAt),
       unreadCount: conversation.unreadCount,
     );

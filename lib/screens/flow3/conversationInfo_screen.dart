@@ -1,70 +1,78 @@
 import 'package:flutter/material.dart';
 
+import 'conversationFiles_screen.dart';
+import '../../services/chat_service.dart';
+import '../../models/conversation.dart' as api;
+import '../../models/message.dart' as msg;
+import '../../utils/file_icon.dart';
+
 const _adaiOrange = Color(0xFFB5651D);
 
-enum MemberStatus { enLigne, absent, horsLigne }
+final _chatServiceForInfo = ChatService();
 
-class ProjectMember {
-  final String name;
-  final String role;
-  final String avatarUrl;
-  final MemberStatus status;
-
-  const ProjectMember({
-    required this.name,
-    required this.role,
-    required this.avatarUrl,
-    required this.status,
-  });
-}
-
-class ConversationInfoScreen extends StatelessWidget {
+class ConversationInfoScreen extends StatefulWidget {
+  final int conversationId;
   final String projectName;
-  final String projectDescription;
-  final int totalDocuments;
-  final List<ProjectMember> members;
 
   const ConversationInfoScreen({
     super.key,
-    this.projectName = 'Mobile App',
-    this.projectDescription = 'Développement de l\'application mobile pour nos utilisateurs.',
-    this.totalDocuments = 8,
-    this.members = const [
-      ProjectMember(
-        name: 'Mirindra R.',
-        role: 'Chef de projet',
-        avatarUrl: 'https://i.pravatar.cc/100?img=12',
-        status: MemberStatus.enLigne,
-      ),
-      ProjectMember(
-        name: 'Tovo M.',
-        role: 'Développeur',
-        avatarUrl: 'https://i.pravatar.cc/100?img=51',
-        status: MemberStatus.enLigne,
-      ),
-      ProjectMember(
-        name: 'Aina R.',
-        role: 'Designer UI/UX',
-        avatarUrl: 'https://i.pravatar.cc/100?img=45',
-        status: MemberStatus.enLigne,
-      ),
-      ProjectMember(
-        name: 'Rakoto N.',
-        role: 'QA Engineer',
-        avatarUrl: 'https://i.pravatar.cc/100?img=33',
-        status: MemberStatus.absent,
-      ),
-      ProjectMember(
-        name: 'Rija S.',
-        role: 'Marketing',
-        avatarUrl: 'https://i.pravatar.cc/100?img=47',
-        status: MemberStatus.horsLigne,
-      ),
-    ],
+    required this.conversationId,
+    required this.projectName,
   });
 
   @override
+  State<ConversationInfoScreen> createState() => _ConversationInfoScreenState();
+}
+
+class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
+  api.Conversation? _conversation;
+  bool _isLoadingConversation = true;
+
+  List<msg.Message> _files = [];
+  bool _isLoadingFiles = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConversation();
+    _loadFiles();
+  }
+
+  Future<void> _loadConversation() async {
+    try {
+      final conversation = await _chatServiceForInfo.getConversation(widget.conversationId);
+      if (!mounted) return;
+      setState(() {
+        _conversation = conversation;
+        _isLoadingConversation = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingConversation = false);
+    }
+  }
+
+  Future<void> _loadFiles() async {
+    try {
+      final files = await _chatServiceForInfo.getFiles(widget.conversationId);
+      if (!mounted) return;
+      setState(() {
+        _files = files;
+        _isLoadingFiles = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingFiles = false);
+    }
+  }
+
+  String get _title => _conversation?.name ?? widget.projectName;
+
+  @override
   Widget build(BuildContext context) {
+    final isGroup = _conversation?.isGroup ?? true;
+    final members = _conversation?.members ?? const [];
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -72,7 +80,7 @@ class ConversationInfoScreen extends StatelessWidget {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black87),
         title: const Text(
-          'Info projet',
+          'À propos de la conversation',
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 16),
         ),
       ),
@@ -87,73 +95,31 @@ class ConversationInfoScreen extends StatelessWidget {
                     width: 64,
                     height: 64,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF3A9B54),
+                      color: _adaiOrange,
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Icon(Icons.phone_iphone, color: Colors.white, size: 30),
+                    child: Icon(
+                      isGroup ? Icons.groups_outlined : Icons.person_outline,
+                      color: Colors.white,
+                      size: 30,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    projectName,
+                    _title,
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.black),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    projectDescription,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.4),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
 
-            Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade200),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: InkWell(
-                onTap: () {
-                  // TODO: naviguer vers les documents du projet
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFDF0DE),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.folder_outlined, size: 18, color: _adaiOrange),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Documents du projet',
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '$totalDocuments fichiers partagés',
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 12.5),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.chevron_right, size: 18, color: Colors.grey.shade400),
-                    ],
-                  ),
-                ),
-              ),
+            const Text(
+              'Fichiers partagés',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black),
             ),
+            const SizedBox(height: 12),
+            _buildFilesSection(),
             const SizedBox(height: 24),
 
             Text(
@@ -161,40 +127,135 @@ class ConversationInfoScreen extends StatelessWidget {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black),
             ),
             const SizedBox(height: 12),
-            for (final member in members) _MemberTile(member: member),
+            if (_isLoadingConversation)
+              const Center(child: CircularProgressIndicator())
+            else if (members.isEmpty)
+              Text('Aucun membre', style: TextStyle(color: Colors.grey.shade600))
+            else
+              for (final member in members) _MemberTile(member: member),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFilesSection() {
+    if (_isLoadingFiles) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_files.isEmpty) {
+      return Text('Aucun fichier partagé', style: TextStyle(color: Colors.grey.shade600));
+    }
+
+    final previewFiles = _files.take(2).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            height: 140,
+            child: Row(
+              children: [
+                for (int i = 0; i < previewFiles.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 3),
+                  Expanded(child: _buildPreviewThumbnail(previewFiles[i])),
+                ],
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        InkWell(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => ConversationFilesScreen(files: _files),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade200),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFDF0DE),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.perm_media_outlined, size: 18, color: _adaiOrange),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Fichiers partagés',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${_files.length} fichier${_files.length > 1 ? 's' : ''}',
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12.5),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, size: 18, color: Colors.grey.shade400),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPreviewThumbnail(msg.Message file) {
+    if (file.fileUrl == null) {
+      return Container(color: Colors.grey.shade200);
+    }
+    if (!file.isImage) {
+      return Container(
+        color: Colors.grey.shade200,
+        alignment: Alignment.center,
+        child: Icon(fileIconForExtension(file.fileExtension), size: 28, color: Colors.grey.shade500),
+      );
+    }
+    return Image.network(
+      file.fileUrl!,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Container(
+        color: Colors.grey.shade200,
+        alignment: Alignment.center,
+        child: Icon(Icons.broken_image_outlined, color: Colors.grey.shade400),
       ),
     );
   }
 }
 
 class _MemberTile extends StatelessWidget {
-  final ProjectMember member;
+  final api.ConversationMember member;
 
   const _MemberTile({required this.member});
 
-  ({Color color, String label}) get _statusStyle {
-    switch (member.status) {
-      case MemberStatus.enLigne:
-        return (color: const Color(0xFF3A9B54), label: 'En ligne');
-      case MemberStatus.absent:
-        return (color: const Color(0xFFE0A527), label: 'Absent');
-      case MemberStatus.horsLigne:
-        return (color: Colors.grey.shade400, label: 'Hors ligne');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final status = _statusStyle;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
           CircleAvatar(
             radius: 20,
-            backgroundImage: NetworkImage(member.avatarUrl),
+            backgroundImage: NetworkImage('https://i.pravatar.cc/100?u=${member.id}'),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -205,28 +266,15 @@ class _MemberTile extends StatelessWidget {
                   member.name,
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  member.role,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12.5),
-                ),
+                if (member.role != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    member.role!,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12.5),
+                  ),
+                ],
               ],
             ),
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(color: status.color, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                status.label,
-                style: TextStyle(color: status.color, fontSize: 12.5, fontWeight: FontWeight.w600),
-              ),
-            ],
           ),
         ],
       ),

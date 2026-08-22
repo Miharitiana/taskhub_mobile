@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'conversationInfo_screen.dart';
 import '../flow2/imageViewer_screen.dart';
@@ -9,6 +11,7 @@ import '../flow2/taskUploadImg_screen.dart';
 import '../../services/chat_service.dart';
 import '../../models/message.dart' as api;
 import '../../models/conversation.dart' as api;
+import '../../utils/file_icon.dart';
 
 final chatService = ChatService();
 
@@ -21,6 +24,9 @@ class ChatMessage {
   final bool isMe;
   final String message;
   final String? imageUrl;
+  final bool isImage;
+  final String? fileName;
+  final int? fileSize;
   final String time;
   final bool isRead;
 
@@ -31,6 +37,9 @@ class ChatMessage {
     required this.isMe,
     required this.message,
     this.imageUrl,
+    this.isImage = true,
+    this.fileName,
+    this.fileSize,
     required this.time,
     this.isRead = false,
   });
@@ -150,6 +159,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
       isMe: _currentUserId != null && message.userId == _currentUserId,
       message: message.body ?? '',
       imageUrl: message.fileUrl,
+      isImage: message.isImage,
+      fileName: message.fileName,
+      fileSize: message.fileSize,
       time: _formatTime(message.createdAt),
     );
   }
@@ -258,15 +270,18 @@ class _ConversationScreenState extends State<ConversationScreen> {
             ),
           IconButton(
             icon: const Icon(Icons.more_vert, color: Colors.black87),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => ConversationInfoScreen(
-                    projectName: _headerTitle,
-                  ),
-                ),
-              );
-            },
+            onPressed: widget.conversationId == null
+                ? null
+                : () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => ConversationInfoScreen(
+                          conversationId: widget.conversationId!,
+                          projectName: _headerTitle,
+                        ),
+                      ),
+                    );
+                  },
           ),
         ],
       ),
@@ -387,32 +402,39 @@ class _MessageBubble extends StatelessWidget {
                         ),
                       if (message.imageUrl != null) ...[
                         const SizedBox(height: 8),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                fullscreenDialog: true,
-                                builder: (context) => ImageViewerScreen(imageUrl: message.imageUrl!),
-                              ),
-                            );
-                          },
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(10),
-                            child: Image.network(
-                              message.imageUrl!,
-                              height: 120,
-                              width: 220,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Container(
+                        if (message.isImage)
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  fullscreenDialog: true,
+                                  builder: (context) => ImageViewerScreen(imageUrl: message.imageUrl!),
+                                ),
+                              );
+                            },
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.network(
+                                message.imageUrl!,
                                 height: 120,
                                 width: 220,
-                                color: Colors.grey.shade200,
-                                alignment: Alignment.center,
-                                child: Icon(Icons.broken_image_outlined, color: Colors.grey.shade400),
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  height: 120,
+                                  width: 220,
+                                  color: Colors.grey.shade200,
+                                  alignment: Alignment.center,
+                                  child: Icon(Icons.broken_image_outlined, color: Colors.grey.shade400),
+                                ),
                               ),
                             ),
+                          )
+                        else
+                          _FileAttachmentCard(
+                            url: message.imageUrl!,
+                            fileName: message.fileName ?? 'Fichier',
+                            fileSize: message.fileSize,
                           ),
-                        ),
                       ],
                     ],
                   ),
@@ -437,6 +459,79 @@ class _MessageBubble extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FileAttachmentCard extends StatelessWidget {
+  final String url;
+  final String fileName;
+  final int? fileSize;
+
+  const _FileAttachmentCard({
+    required this.url,
+    required this.fileName,
+    this.fileSize,
+  });
+
+  Future<void> _openFile(BuildContext context) async {
+    final uri = Uri.parse(url);
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossible d\'ouvrir ce fichier.'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final extension = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : '';
+    return InkWell(
+      onTap: () => _openFile(context),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 220,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F5F5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(fileIconForExtension(extension), size: 18, color: _adaiOrange),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.black87),
+                  ),
+                  if (fileSize != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      formatFileSize(fileSize),
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -476,6 +571,39 @@ class _MessageInputBar extends StatelessWidget {
               }
             },
             child: Icon(Icons.image_outlined, color: Colors.grey.shade500, size: 22),
+          ),
+          const SizedBox(width: 12),
+          GestureDetector(
+            onTap: () async {
+              // Sélection d'un fichier quelconque (pas seulement une image) :
+              // image_picker ne gère que la caméra/galerie, il faut file_picker
+              // pour pdf/doc/xls/ppt/txt/csv/zip/rar — mêmes extensions que
+              // celles validées côté Laravel (sendMessage).
+              try {
+                final result = await FilePicker.platform.pickFiles(
+                  withData: true,
+                  type: FileType.custom,
+                  allowedExtensions: const [
+                    'jpg', 'jpeg', 'png', 'gif', 'webp',
+                    'pdf', 'doc', 'docx', 'xls', 'xlsx',
+                    'ppt', 'pptx', 'txt', 'csv', 'zip', 'rar',
+                  ],
+                );
+                final file = result?.files.single;
+                if (file?.bytes != null) {
+                  await onImageSelected(file!.bytes!, file.name, null);
+                }
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Sélection de fichier impossible : $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: Icon(Icons.attach_file, color: Colors.grey.shade500, size: 22),
           ),
           const SizedBox(width: 8),
           Expanded(

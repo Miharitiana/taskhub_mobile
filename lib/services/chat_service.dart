@@ -166,10 +166,11 @@ class ChatService {
     }
   }
 
-  // Correction : accepte maintenant une image (bytes + nom de fichier), en
-  // plus du texte. Laravel valide "image" comme un fichier (impossible en
-  // JSON), donc on passe en multipart dès qu'une image est fournie — même
-  // logique que CommentService.commentAjout.
+  // Correction : le backend attend maintenant le champ multipart "file" (pas
+  // "image") — sendMessage accepte désormais n'importe quelle pièce jointe
+  // (pdf, doc, xls, ppt, txt, csv, zip, rar...), pas seulement des images.
+  // Envoyer "image" comme avant ne matchait plus aucune règle de validation
+  // côté Laravel, donc le fichier n'était jamais reçu.
   Future<Message> sendMessages(
     int conversationId, {
     String? body,
@@ -191,7 +192,7 @@ class ChatService {
     if (imageBytes != null) {
       request.files.add(
         http.MultipartFile.fromBytes(
-          'image',
+          'file',
           imageBytes,
           filename: imageFileName ?? 'chat_image.jpg',
         ),
